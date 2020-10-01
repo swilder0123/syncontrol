@@ -42,34 +42,25 @@ It may also be desirable to &quot;de-scope&quot; the automation account. This ca
 
 Once the Automation account is set up, and the automation Run As account and connection are ready, it&#39;s time to load the runbook. To do so, simply click the Runbooks option in the left side menu.
 
-![](RackMultipart20201001-4-1nwalbl_html_df44ee6b16ba7688.gif)
-
 \&gt;\&gt; Then on the top menu bar, click **Create a runbook:**
 
-![](RackMultipart20201001-4-1nwalbl_html_4af3167a709b64d.gif)
-
 Enter the appropriate settings. Make sure the runbook type is PowerShell, not PowerShell workflow:
-
-![](RackMultipart20201001-4-1nwalbl_html_de40eff088094ec.gif) ![](RackMultipart20201001-4-1nwalbl_html_b021982f2d55b668.gif)
 
 Once the runbook is created, you can copy script into it. To do so, find and click:
 
 Finally, paste the script into the editing window. You can make edits, save, publish and/or run (test) the workbook in this view:
 
-![](RackMultipart20201001-4-1nwalbl_html_b13e7ff0fd4b53f7.gif)
-**Name**  **Use a descriptive name which meets Azure general naming requirements**
-**Subscription**** Will default to your current subscription. If you have another subscription under your user context, they will appear in the pulldown menu**
-**Resource Group**** Choose an existing Resource Group from the pulldown menu or click &quot;Create new&quot;.**
-**Location**** Select the Location (Azure Region) for your new account. Note that if you want to pair your Automation Account with an existing Log Analytics namespace, you need to select the location where the existing Log Analytics workspace resides.**
-**Create Azure Run As account**** Select Yes to automatically grant your runbooks permissions to perform common Azure administrative tasks.
+|**Item**|**Description**|
+|:---|:---|
+|**Name**|Use a descriptive name which meets Azure general naming requirements|
+|**Subscription**|Will default to your current subscription. If you have another subscription under your user context, they will appear in the pulldown menu|
+|**Resource Group**|Choose an existing Resource Group from the pulldown menu or click **Create new**|
+|**Location**|Select the Location (Azure Region) for your new account. Note that if you want to pair your Automation Account with an existing Log Analytics namespace, you need to select the location where the existing Log Analytics workspace resides.|
+|**Create Azure Run As account**|Select Yes to automatically grant your runbooks permissions to perform common Azure administrative tasks.|
 
- NOTE: In many cases this option will not succeed because of access privileges in Azure, Azure AD, or both. In this case, the automation account will be created but the security principal will need to be added manually.**
+**NOTE:** In many cases this option will not succeed because of access privileges in Azure, Azure AD, or both. In this case, the automation account will be created but the security principal will need to be added manually.**
 
 **Read the security recommendations in the next section.**
-
-
- |
-| --- | --- |
 
 ## Understanding the Runbook User Context
 
