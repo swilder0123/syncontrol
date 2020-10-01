@@ -5,7 +5,8 @@ Runbooks are hosted within an Azure Automation account. You can create an automa
 # Creating the Automation Account
 
 Runbooks are hosted within an Azure Automation account. You can create an automation account in a new or existing Resource Group. The following table discusses each option in a little more detail:
-|---|---|
+| Item | Description |
+|:---|:---|
 | **Name** |  Use a descriptive name which meets Azure general naming requirements |
 | **Subscription** | Will default to your current subscription. If you have another subscription under your user context, they will appear in the pulldown menu |
 | **Resource Group**| Choose an existing Resource Group from the pulldown menu or click **Create**|
