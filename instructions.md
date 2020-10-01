@@ -89,18 +89,12 @@ It may also be desirable to &quot;de-scope&quot; the automation account. This ca
 
 Once the Automation account is set up, and the automation Run As account and connection are ready, it&#39;s time to load the runbook. To do so, simply click the Runbooks option in the left side menu.
 
-![](RackMultipart20201001-4-1nwalbl_html_df44ee6b16ba7688.gif)
-
 \&gt;\&gt; Then on the top menu bar, click **Create a runbook:**
 
-![](RackMultipart20201001-4-1nwalbl_html_4af3167a709b64d.gif)
+Enter the appropriate settings. Make sure the runbook type is PowerShell, not PowerShell workflow.
 
-Enter the appropriate settings. Make sure the runbook type is PowerShell, not PowerShell workflow:
+Once the runbook is created, you can copy script into it. To do so, find and click the Edit button (pencil).
 
-![](RackMultipart20201001-4-1nwalbl_html_de40eff088094ec.gif) ![](RackMultipart20201001-4-1nwalbl_html_b021982f2d55b668.gif)
+Finally, paste the script into the editing window. You can make edits, save, publish and/or run (test) the workbook in this view.
 
-Once the runbook is created, you can copy script into it. To do so, find and click:
 
-Finally, paste the script into the editing window. You can make edits, save, publish and/or run (test) the workbook in this view:
-
-![](RackMultipart20201001-4-1nwalbl_html_b13e7ff0fd4b53f7.gif)
