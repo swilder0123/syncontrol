@@ -42,7 +42,7 @@ It may also be desirable to &quot;de-scope&quot; the automation account. This ca
 
 Once the Automation account is set up, and the automation Run As account and connection are ready, it&#39;s time to load the runbook. To do so, simply click the Runbooks option in the left side menu.
 
->> Then on the top menu bar, click **Create a runbook:**
+> Then on the top menu bar, click **Create a runbook:**
 
 Enter the appropriate settings. Make sure the runbook type is PowerShell, not PowerShell workflow:
 
@@ -89,7 +89,7 @@ It may also be desirable to &quot;de-scope&quot; the automation account. This ca
 
 Once the Automation account is set up, and the automation Run As account and connection are ready, it&#39;s time to load the runbook. To do so, simply click the Runbooks option in the left side menu.
 
->> Then on the top menu bar, click **Create a runbook:**
+> Then on the top menu bar, click **Create a runbook:**
 
 Enter the appropriate settings. Make sure the runbook type is PowerShell, not PowerShell workflow.
 
