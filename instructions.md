@@ -3,7 +3,6 @@
 Runbooks are hosted within an Azure Automation account. You can create an automation account in a new or existing Resource Group. The following table discusses each option in a little more detail:
 
 ![](images/add-automation.png)
-
 | Item | Description |
 |:---|:---|
 | **Name** |  Use a descriptive name which meets Azure general naming requirements |
