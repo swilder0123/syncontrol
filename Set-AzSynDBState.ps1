@@ -76,8 +76,10 @@ param
  #>
 function Login-AzureAutomation {
     try {
-        $RunAsConnection = Get-AutomationConnection -Name "AzureRunAsConnection"
-
+        
+        $RunAsConnection = Get-AutomationConnection -Name 'AzureRunAsConnection' 
+        write-verbose $RunAsConnection
+        
         Write-Output "Logging in to Azure ($AzureEnvironment)..."
         
         if (!$RunAsConnection.ApplicationId) {
@@ -85,14 +87,14 @@ function Login-AzureAutomation {
             throw $ErrorMessage            
         }
         
-        Connect-AzureRmAccount `
+        Add-AzureRmAccount `
             -ServicePrincipal `
             -TenantId $RunAsConnection.TenantId `
             -ApplicationId $RunAsConnection.ApplicationId `
             -CertificateThumbprint $RunAsConnection.CertificateThumbprint `
-            -Environment $AzureEnvironment
+            -Environment $(Get-AzureRmEnvironment -Name $AzureEnvironment)
 
-        Select-AzureRmSubscription -Subscription $RunAsConnection.SubscriptionID  | Write-Verbose
+        Select-AzureRmSubscription -SubscriptionId $RunAsConnection.SubscriptionID  | Write-Verbose
        
     } catch {
         if (!$RunAsConnection) {
@@ -127,7 +129,9 @@ $param = @{
 
 $database = Get-AzureRmSqlDatabase @param
 
-if($database.SkuName -ne "DataWarehouse")
+write-output $database
+
+if($database.Edition -ne "DataWarehouse")
 {
     throw "Only databases of type DataWarehouse support being paused."
 }
