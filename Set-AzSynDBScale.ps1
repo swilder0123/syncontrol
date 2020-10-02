@@ -59,7 +59,7 @@ param
 
 <#
     .SYNOPSIS
-        Connects to Azure and sets the provided subscription.
+        Connects to Azure and sets the provided subscription. This function assumes that you have created the default automation connection on account creation.
  #>
 function Login-AzureAutomation {
     try {
@@ -125,26 +125,27 @@ $targetObjectiveLevel = $currentObjectiveLevel
 $maxObjectiveLevel = $serviceObjectives.GetUpperBound(0)
 $minObjectiveLevel = 0
 
-#the switch will set the new targetLevel. It will detect if we have an out of boundary exception and set the result to the minimum or maximum.
-
+# Based on the current ServiceObjectiveLevel, the switch will set a new targetObjectiveLevel. Some simple logic will test if we have a boundary exception...
 switch($DesiredScale) {
-  "NoChange" {#do nothing, this option allows us to run the script to see the current level}
-  "Up"       {$targetObjectiveLevel += $ScaleSteps; if($targetObjectiveLevel -gt $maxObjectiveLevel){$targetObjectiveLevel = $maxObjectiveLevel}}
-  "Down"     {$targetObjectiveLevel -+ $ScaleSteps; if($targetObjectiveLevel -lt $minObjectiveLevel){$targetObjectiveLevel = $minObjectiveLevel}}
+  "NoChange" {$targetObjectiveLevel = $currentObjectiveLevel}
+  "Up"       {if(($targetObjectiveLevel += $ScaleSteps) -gt $maxObjectiveLevel) {$targetObjectiveLevel = $maxObjectiveLevel}}
+  "Down"     {if(($targetObjectiveLevel -+ $ScaleSteps) -lt $minObjectiveLevel)) {$targetObjectiveLevel = $minObjectiveLevel}}
   "Maximum"  {$targetObjectiveLevel =  $maxObjectiveLevel}
   "Minimum"  {$targetObjectiveLevel =  $minObjectiveLevel}
   "ScaleObjective" {
-      #make sure the passed-in service objective is in the list.
-      if(!(serviceObjectives | where ServiceObjectiveName -eq $ServiceObjective))
-      {
-          throw "Specified scale objective was not found in $location."
-      }
-      else {
-          $targetObjectiveLevel = $serviceObjectives.IndexOf($ServiceObjective)
-      }
+    #make sure the passed-in service objective is in the list.
+    if(!(serviceObjectives | where ServiceObjectiveName -eq $ServiceObjective))
+    {
+      throw "Specified scale objective was not found in $location."
+    }
+    else {
+      # find the index of the entry specified
+      $targetObjectiveLevel = $serviceObjectives.IndexOf($ServiceObjective)
+    }
   }
 }
 
+# This indexes into the table so we can figure out what the name of the new ServiceObjectiveLevel is...
 $targetObjective = $serviceObjectives[$targetObjectiveLevel]
 $targetObjectiveName = $targetObjective.ServiceObjectiveName
 
