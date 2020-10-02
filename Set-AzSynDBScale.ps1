@@ -27,9 +27,11 @@
     .PARAMETER DatabaseName
         Name of the data warehouse database.
     .PARAMETER DesiredScale
-        Desired state of the data warehouse. Can be NoChange, Up, Down, Maximum or Minimum, default is NoChange.
+        Desired state of the data warehouse. Can be NoChange, Up, Down, Maximum or Minimum, or ScaleObjective; default is NoChange.
     .PARAMETER ScaleSteps
         Desired scale steps up or down from the current scale, default is 1. Only used if DesiredState is Up or Down.
+    .PARAMETER ScaleObjective
+        Desired scale objective by name. Only used if DesiredScale is ScaleObjective.
     .PARAMETER $AzureEnvironment
         Azure Cloud environment which will be used in the connection. Default is AzureCloud.
 #>
@@ -45,10 +47,12 @@ param
     [Parameter(Mandatory = $true)]
     [string] $DatabaseName,
 
-    [validateSet("NoChange", "Up", "Down", "Maximum", "Minimum")]
+    [validateSet("NoChange", "Up", "Down", "Maximum", "Minimum", "ScaleObjective")]
     [string] $DesiredScale = "NoChange",
     
     [int] ScaleSteps = 1,
+    
+    [string] ScaleObjective,
 
     [string] $AzureEnvironment = "AzureCloud"
 )
@@ -129,6 +133,16 @@ switch($DesiredScale) {
   "Down"     {$targetObjectiveLevel -+ $ScaleSteps; if($targetObjectiveLevel -lt $minObjectiveLevel){$targetObjectiveLevel = $minObjectiveLevel}}
   "Maximum"  {$targetObjectiveLevel =  $maxObjectiveLevel}
   "Minimum"  {$targetObjectiveLevel =  $minObjectiveLevel}
+  "ScaleObjective" {
+      #make sure the passed-in service objective is in the list.
+      if(!(serviceObjectives | where ServiceObjectiveName -eq $ServiceObjective))
+      {
+          throw "Specified scale objective was not found in $location."
+      }
+      else {
+          $targetObjectiveLevel = $serviceObjectives.IndexOf($ServiceObjective)
+      }
+  }
 }
 
 $targetObjective = $serviceObjectives[$targetObjectiveLevel]
@@ -147,5 +161,13 @@ if($targetObjectiveLevel -eq $currentObjectiveLevel)
 }
 else 
 {
-    Set-AzSqlDatabase -DatabaseName $database.DatabaseName -RequestedServiceObjectiveName $targetObjectiveName -ServerName $ServerName
+    try {
+        $status = Set-AzSqlDatabase -DatabaseName $DatabaseName -RequestedServiceObjectiveName $targetObjectiveName -ServerName $ServerName
+    }
+    catch {
+        write-output "The scale attempt failed:"
+        write-output "  Datebase Name: $($ServerName/$DatabaseName)
+        throw $_.Exception
+    }
+    write-output $status
 }
