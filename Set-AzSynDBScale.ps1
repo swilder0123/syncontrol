@@ -47,12 +47,16 @@ param
     [Parameter(Mandatory = $true)]
     [string] $DatabaseName,
 
-    [validateSet("NoChange", "Up", "Down", "Maximum", "Minimum", "ScaleObjective")]
+    [validateSet("Up", "Down", "Maximum", "Minimum", "ScaleObjective")]
     [string] $DesiredScale = "NoChange",
     
-    [int] ScaleSteps = 1,
+    [int]    $ScaleSteps = 1,
     
-    [string] ScaleObjective,
+    [string] $ScaleObjective,
+
+    [switch] $WhatIf,
+
+    [switch] $ShowPlan,
 
     [string] $AzureEnvironment = "AzureCloud"
 )
@@ -60,11 +64,15 @@ param
 <#
     .SYNOPSIS
         Connects to Azure and sets the provided subscription. This function assumes that you have created the default automation connection on account creation.
- #>
+#>
+
+#region Login-AzureAutomation
 function Login-AzureAutomation {
     try {
-        $RunAsConnection = Get-AutomationConnection -Name "AzureRunAsConnection"
-
+        
+        $RunAsConnection = Get-AutomationConnection -Name 'AzureRunAsConnection' 
+        write-verbose $RunAsConnection
+        
         Write-Output "Logging in to Azure ($AzureEnvironment)..."
         
         if (!$RunAsConnection.ApplicationId) {
@@ -72,14 +80,14 @@ function Login-AzureAutomation {
             throw $ErrorMessage            
         }
         
-        Connect-AzureRmAccount `
+        Add-AzureRmAccount `
             -ServicePrincipal `
             -TenantId $RunAsConnection.TenantId `
             -ApplicationId $RunAsConnection.ApplicationId `
             -CertificateThumbprint $RunAsConnection.CertificateThumbprint `
-            -Environment $AzureEnvironment
+            -Environment $(Get-AzureRmEnvironment -Name $AzureEnvironment)
 
-        Select-AzureRmSubscription -Subscription $RunAsConnection.SubscriptionID  | Write-Verbose
+        Select-AzureRmSubscription -SubscriptionId $RunAsConnection.SubscriptionID  | Write-Verbose
        
     } catch {
         if (!$RunAsConnection) {
@@ -92,6 +100,7 @@ function Login-AzureAutomation {
         throw $_.Exception
     }
 }
+#endregion
 
 Import-Module "AzureRM.Profile" -ErrorAction Stop
 Import-Module "AzureRM.Sql" -ErrorAction Stop
@@ -113,30 +122,30 @@ $param = @{
 }
 
 $database = Get-AzureRmSqlDatabase @param
-$location = $database.location
 
-#Retrieve a table of the various service levels
-$serviceObjectives = Get-AzSqlServerServiceObjective -Location $location | where Edition -eq DataWarehouse | select ServiceObjectiveName, Capacity | sort Capacity
+# Retrieve a table of the various service levels
+# $serviceObjectives = Get-AzureRmSqlServerServiceObjective -Location $location | where Edition -eq DataWarehouse | select ServiceObjectiveName, Capacity | sort Capacity
+$serviceObjectives = Get-AzureRmSqlServerServiceObjective -ResourceGroupName $ResourceGroupName -ServerName $ServerName -ServiceObjectiveName DW* | Select ServiceObjectiveLevel, Capacity | Sort Capacity
 $currentObjectiveName = $(serviceObjectives | where ServiceObjectiveName -eq $database.CurrentServiceObjectiveName)
 
-# Figure out if we can scale up or down
+# Figure out if we can scale up or down by indexing into the table of available serviceobjectivelevels
 $currentObjectiveLevel = $serviceObjectives.IndexOf($currentObjectiveName)
 $targetObjectiveLevel = $currentObjectiveLevel
 $maxObjectiveLevel = $serviceObjectives.GetUpperBound(0)
 $minObjectiveLevel = 0
+$actionDescription = ""
 
 # Based on the current ServiceObjectiveLevel, the switch will set a new targetObjectiveLevel. Some simple logic will test if we have a boundary exception...
 switch($DesiredScale) {
-  "NoChange" {$targetObjectiveLevel = $currentObjectiveLevel}
   "Up"       {if(($targetObjectiveLevel += $ScaleSteps) -gt $maxObjectiveLevel) {$targetObjectiveLevel = $maxObjectiveLevel}}
-  "Down"     {if(($targetObjectiveLevel -+ $ScaleSteps) -lt $minObjectiveLevel)) {$targetObjectiveLevel = $minObjectiveLevel}}
+  "Down"     {if(($targetObjectiveLevel -+ $ScaleSteps) -lt $minObjectiveLevel) {$targetObjectiveLevel = $minObjectiveLevel}}
   "Maximum"  {$targetObjectiveLevel =  $maxObjectiveLevel}
   "Minimum"  {$targetObjectiveLevel =  $minObjectiveLevel}
   "ScaleObjective" {
     #make sure the passed-in service objective is in the list.
     if(!(serviceObjectives | where ServiceObjectiveName -eq $ServiceObjective))
     {
-      throw "Specified scale objective was not found in $location."
+      throw "Specified scale objective was not found in the the list of available levels for this database."
     }
     else {
       # find the index of the entry specified
@@ -154,20 +163,22 @@ if($database.SkuName -ne "DataWarehouse")
     throw "Only databases of type DataWarehouse support being scaled."
 }
 
-Write-Output "Database $DatabaseName current service objective is: $currentObjectiveName, the desired service objective is $targetObjectiveName."
+if ($ShowPlan) {
+    Write-Output "Desired scale action is $DesiredScale"
+    Write-Output "Database $DatabaseName current service objective is: $currentObjectiveName, the desired service objective is $targetObjectiveName."
+}
 
-if($targetObjectiveLevel -eq $currentObjectiveLevel)
+if ($WhatIf -or ($targetObjectiveLevel -eq $currentObjectiveLevel))
 {
     write-output "No change was specified...the current service objective of $currentObjectiveName will not be changed."
 }
-else 
-{
+else {
     try {
         $status = Set-AzSqlDatabase -DatabaseName $DatabaseName -RequestedServiceObjectiveName $targetObjectiveName -ServerName $ServerName
     }
     catch {
         write-output "The scale attempt failed:"
-        write-output "  Datebase Name: $($ServerName/$DatabaseName)
+        write-output "  Database Name: $($ServerName/$DatabaseName)"
         throw $_.Exception
     }
     write-output $status
