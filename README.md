@@ -15,3 +15,8 @@ You need to create an Azure Automation account in your subscription.
 
 An Azure automation object called AzureRunAsConnection must exist. It should have at least Contributor level permissions on the resource group containing the DB pools you want to control. (It may be possible to grant more fine grained control if needed.) There are additional details in the instructions document.
 
+## Azure Runbook Installation
+TBD
+
+## Azure Runbook Scheduling
+TBD
