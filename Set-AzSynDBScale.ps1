@@ -21,19 +21,23 @@
     .Description
         This routine is failsafe. Any attempt to underscale or overscale will be automatically handled with no data exception.
     .PARAMETER ResourceGroupName
-        Name of the resource group that contains the data warehouse.
+        Name of the resource group that contains the data warehouse DB.
     .PARAMETER ServerName
-        Name of the Azure SQL Server that contains the data warehouse.
+        Name of the Azure SQL Server that controls the data warehouse DB.
     .PARAMETER DatabaseName
-        Name of the data warehouse database.
-    .PARAMETER DesiredScale
-        Desired state of the data warehouse. Can be NoChange, Up, Down, Maximum or Minimum, or ScaleObjective; default is NoChange.
+        Name of the data warehouse DB.
+    .PARAMETER ScaleOperation
+        Desired state of the data warehouse. Can be ScaleUp, ScaleDown, or ScaleObjective.
     .PARAMETER ScaleSteps
-        Desired scale steps up or down from the current scale, default is 1. Only used if DesiredState is Up or Down.
+        Desired scale steps up or down from the current scale, default is 1, allowed range is 0..100. Ignored unless ScaleOperation is ScaleUp or ScaleDown.
     .PARAMETER ScaleObjective
-        Desired scale objective by name. Only used if DesiredScale is ScaleObjective.
+        Desired scale objective by name. Will be confirmed against available ServiceObjectives list for database. Ignored unless ScaleOperation is ScaleObjective.
+    .PARAMETER WhatIf
+        Run the script but do not execute the scale action.
+    .PARAMETER ShowPlan
+        Show the current and target scale (service) levels. Automatically specified if you choose WhatIf, there is no error if you specify both.
     .PARAMETER $AzureEnvironment
-        Azure Cloud environment which will be used in the connection. Default is AzureCloud.
+        Azure Cloud environment which will be used in the connection. Default is AzureCloud. This script has not been tested on other Azure cloud environments.
 #>
 
 param
@@ -47,9 +51,11 @@ param
     [Parameter(Mandatory = $true)]
     [string] $DatabaseName,
 
-    [validateSet("Up", "Down", "Maximum", "Minimum", "ScaleObjective")]
-    [string] $DesiredScale = "NoChange",
+    [Parameter(Mandatory = $true)]
+    [validateSet("ScaleUp","ScaleDown","ScaleObjective")]
+    [string] $ScaleOperation,
     
+    [validateRange(0,100)]
     [int]    $ScaleSteps = 1,
     
     [string] $ScaleObjective,
@@ -123,48 +129,115 @@ $param = @{
 
 $database = Get-AzureRmSqlDatabase @param
 
+# We have to create custom collection because the default list isn't sortable...
+$serviceObjectiveList = New-Object System.Collections.ArrayList
+
 # Retrieve a table of the various service levels
 # $serviceObjectives = Get-AzureRmSqlServerServiceObjective -Location $location | where Edition -eq DataWarehouse | select ServiceObjectiveName, Capacity | sort Capacity
-$serviceObjectives = Get-AzureRmSqlServerServiceObjective -ResourceGroupName $ResourceGroupName -ServerName $ServerName -ServiceObjectiveName DW* | Select ServiceObjectiveLevel, Capacity | Sort Capacity
-$currentObjectiveName = $(serviceObjectives | where ServiceObjectiveName -eq $database.CurrentServiceObjectiveName)
+try {
+$serviceObjectiveSet = Get-AzureRmSqlServerServiceObjective `
+    -ResourceGroupName $ResourceGroupName `
+    -ServerName $ServerName `
+    -DatabaseName $DatabaseName `
+    | Where ServiceObjectiveName -like "DW*"
+}
+catch {
+    write-output $_.Exception
+}
+
+# Build a trimmed, sortable Service Objective List we can index into...
+foreach ($serviceObjective in $serviceObjectiveSet)
+{ 
+    $serviceObjective | Write-Verbose
+    
+    $thisObjective = New-Object System.Object
+    $serviceObjectiveName = $serviceObjective.ServiceObjectiveName
+    # if there's  a 'c' on the end of the capacity string, keep this record, otherwise silently discard it.
+    if($serviceObjectiveName.EndsWith("c"))
+    {
+        $thisObjective | Add-Member -MemberType NoteProperty -Name "ServiceObjectiveName" -Value $serviceObjectiveName
+    
+        # We need to parse the capacity out of the serviceObjectiveName string, this will give us an ordinal to sort on.
+        # Pattern:
+        #     (\DW) -- matching group which always == DW
+        #     (\d+) -- the capacity level (3-4 digits)
+        #     (c*)  -- there may or may not be a 'c' on the end, we will need to filter out the ones with no 'c'
+        # The matching group is 1-based because the default matching group (0) == the entire matched value
+
+        # Without getting crazy about types, we need a sortable number value, so left pad with zeroes...
+        $capacity = $($serviceObjectiveName | select-string -Pattern "^(\DW)(\d+)(c*)`$").Matches.Groups[2].Value.PadLeft(6,'0')
+        $thisObjective | Add-Member -MemberType NoteProperty -Name "Capacity" -Value $capacity
+        
+        $serviceObjectiveList.Add($thisObjective) | Out-Null
+    }
+}
+
+# Sort the list by Capacity to make sure the scale levels are in the right order
+$serviceObjectiveList = $serviceObjectiveList | Sort Capacity
+
+# Double-check the presence of the current item on the list, we are also going to use this to index in...
+$currentObjectiveName = $database.CurrentServiceObjectiveName
+
+$serviceObjectiveList | write-output
+$database | write-output
+$currentObjectiveName | write-output
+$serviceObjectiveList.ServiceObjectiveName.IndexOf($currentObjectiveName) | write-output
+
+# if(!($($serviceObjectiveList | where ServiceObjectiveName -eq $currentObjectiveName))){
+#     throw "ERROR: Can't find the current scale option on the list of available service levels."
+# }
 
 # Figure out if we can scale up or down by indexing into the table of available serviceobjectivelevels
-$currentObjectiveLevel = $serviceObjectives.IndexOf($currentObjectiveName)
+try {
+    $currentObjectiveLevel = $serviceObjectiveList.ServiceObjectiveName.IndexOf($currentObjectiveName)
+    "The current ServiceObjectiveLevel is verified as: $currentObjectiveLevel" | write-output
+}
+catch {
+    throw "ERROR: Can't find the current scale option on the list of available service levels."
+}
+
+# Unless we have a valid new targetObjectiveLevel, stay where we are....
 $targetObjectiveLevel = $currentObjectiveLevel
-$maxObjectiveLevel = $serviceObjectives.GetUpperBound(0)
+$maxObjectiveLevel = $serviceObjectiveList.Count - 1
 $minObjectiveLevel = 0
-$actionDescription = ""
+
+write-output "Target objective level before: $targetObjectiveLevel"
 
 # Based on the current ServiceObjectiveLevel, the switch will set a new targetObjectiveLevel. Some simple logic will test if we have a boundary exception...
-switch($DesiredScale) {
-  "Up"       {if(($targetObjectiveLevel += $ScaleSteps) -gt $maxObjectiveLevel) {$targetObjectiveLevel = $maxObjectiveLevel}}
-  "Down"     {if(($targetObjectiveLevel -+ $ScaleSteps) -lt $minObjectiveLevel) {$targetObjectiveLevel = $minObjectiveLevel}}
-  "Maximum"  {$targetObjectiveLevel =  $maxObjectiveLevel}
-  "Minimum"  {$targetObjectiveLevel =  $minObjectiveLevel}
+switch($ScaleOperation) {
+  "ScaleUp"       {if(($targetObjectiveLevel += $ScaleSteps) -gt $maxObjectiveLevel) {$targetObjectiveLevel = $maxObjectiveLevel}}
+  "ScaleDown"     {if(($targetObjectiveLevel -+ $ScaleSteps) -lt $minObjectiveLevel) {$targetObjectiveLevel = $minObjectiveLevel}}
   "ScaleObjective" {
-    #make sure the passed-in service objective is in the list.
-    if(!(serviceObjectives | where ServiceObjectiveName -eq $ServiceObjective))
-    {
-      throw "Specified scale objective was not found in the the list of available levels for this database."
+        switch($ScaleObjective){
+            "Maximum" {$targetObjectiveLevel = $maxObjectiveLevel}
+            "Minimum" {$targetObjectiveLevel = $minObjectiveLevel}
+            default   {
+                # Make sure the passed-in service objective ($ScaleObjective parameter) is in the list.
+                if(!($serviceObjectiveList | where ServiceObjectiveName -eq $ScaleObjective)) 
+                {
+                    throw "ERROR: Specified scale objective was not found in the the list of available levels for this database."
+                }
+                else {
+                    # find the index of the entry specified
+                    $targetObjectiveLevel = $serviceObjectiveList.ServiceObjectiveName.IndexOf($ScaleObjective)
+                }
+            }
+        }
     }
-    else {
-      # find the index of the entry specified
-      $targetObjectiveLevel = $serviceObjectives.IndexOf($ServiceObjective)
-    }
-  }
 }
+
+Write-Verbose "Target objective level after: $targetObjectiveLevel"
 
 # This indexes into the table so we can figure out what the name of the new ServiceObjectiveLevel is...
-$targetObjective = $serviceObjectives[$targetObjectiveLevel]
-$targetObjectiveName = $targetObjective.ServiceObjectiveName
+$targetObjectiveName = $serviceObjectiveList[$targetObjectiveLevel].ServiceObjectiveName
 
-if($database.SkuName -ne "DataWarehouse")
+if($database.Edition -ne "DataWarehouse")
 {
-    throw "Only databases of type DataWarehouse support being scaled."
+    throw "ERROR: Only databases of type DataWarehouse support being scaled."
 }
 
-if ($ShowPlan) {
-    Write-Output "Desired scale action is $DesiredScale"
+if ($WhatIf -or $ShowPlan) {
+    Write-Output "Desired scale action is $ScaleOperation"
     Write-Output "Database $DatabaseName current service objective is: $currentObjectiveName, the desired service objective is $targetObjectiveName."
 }
 
@@ -174,11 +247,11 @@ if ($WhatIf -or ($targetObjectiveLevel -eq $currentObjectiveLevel))
 }
 else {
     try {
-        $status = Set-AzSqlDatabase -DatabaseName $DatabaseName -RequestedServiceObjectiveName $targetObjectiveName -ServerName $ServerName
+        # $status = Set-AzSqlDatabase -DatabaseName $DatabaseName -RequestedServiceObjectiveName $targetObjectiveName -ServerName $ServerName
+         $status = Set-AzureRmSqlDatabase -ResourceGroupName $ResourceGroupName -DatabaseName $DatabaseName -RequestedServiceObjectiveName $targetObjectiveName -ServerName $ServerName
     }
     catch {
-        write-output "The scale attempt failed:"
-        write-output "  Database Name: $($ServerName/$DatabaseName)"
+        write-output "The scale attempt failed on $ServerName for $DatabaseName."
         throw $_.Exception
     }
     write-output $status
