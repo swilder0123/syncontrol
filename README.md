@@ -11,7 +11,7 @@ Each script has parameters which are self-documenting.
 
 ## Azure Automation account requirements
 You need to create an Azure Automation account in your subscription.
-- **Note =** See [the instructions](instructions.md) for more information on how to set up an automation account.
+> **Note ** See the [instructions](instructions.md) for more information on how to set up an automation account.
 
 An Azure automation object called AzureRunAsConnection must exist. It should have at least Contributor level permissions on the resource group containing the DB pools you want to control. (It may be possible to grant more fine grained control if needed.) There are additional details in the instructions document.
 
